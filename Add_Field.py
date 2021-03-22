@@ -23,7 +23,12 @@
 """
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction
+from qgis.PyQt.QtWidgets import QAction, QFileDialog, QMessageBox
+from qgis.core import *
+from PyQt5.QtCore import QVariant, QFileInfo
+from os import path
+from xlrd import open_workbook
+from os import path
 
 # Initialize Qt resources from file resources.py
 from .resources import *
@@ -180,6 +185,8 @@ class Add_Field:
             self.iface.removeToolBarIcon(action)
 
 
+
+
     def run(self):
         """Run method that performs all the real work"""
 
@@ -189,7 +196,135 @@ class Add_Field:
             self.first_start = False
             self.dlg = Add_FieldDialog()
 
-        # show the dialog
+        selectedLayer1=None
+        selectedLayer2=None
+
+       
+        def clearForm():
+            self.dlg.selectLayerGroupBox.setEnabled(True)
+            self.dlg.inputBtn1.setEnabled(True)
+            self.dlg.inputBtn2.setEnabled(False)
+            self.dlg.nameFile1.clear()
+            self.dlg.nameFile2.clear()
+            self.dlg.addFieldGroupBox.setEnabled(False)
+            self.dlg.nameNewField.clear()
+            self.dlg.fieldComboBox.clear()
+
+        clearForm()
+
+        def selectLayer1():
+            global selectedLayer1
+            selectedShapefile = QFileDialog.getOpenFileName(None, "Wybierz plik shp", "", "Shapefile (*.shp)")
+
+            if len(selectedShapefile[0])==0:
+                msg=QMessageBox.critical(None,"Wybierz plik shapefile",'Nie wybrano pliku shapefile!')
+            else:
+                self.dlg.nameFile1.setText(selectedShapefile[0])
+                selectedLayer1 = QgsVectorLayer(selectedShapefile[0], "Wybrana warstwa1", "ogr")
+                crs = QgsCoordinateReferenceSystem('EPSG:2180')
+                selectedLayer1.setCrs(crs)
+                QgsProject.instance().addMapLayers([selectedLayer1])
+                self.dlg.inputBtn1.setEnabled(False)
+                self.dlg.inputBtn2.setEnabled(True)
+
+            
+
+        def selectLayer2():
+            global selectedLayer2
+            selectedShapefile = QFileDialog.getOpenFileName(None, "Wybierz plik shp", "", "Shapefile (*.shp)")
+            if len(selectedShapefile[0])==0:
+                msg=QMessageBox.critical(None,"Wybierz plik shapefile",'Nie wybrano pliku shapefile!')
+            else:
+                self.dlg.nameFile2.setText(selectedShapefile[0])
+                selectedLayer2 = QgsVectorLayer(selectedShapefile[0], "Wybrana warstwa2", "ogr")
+                crs = QgsCoordinateReferenceSystem('EPSG:2180')
+                selectedLayer2.setCrs(crs)
+                QgsProject.instance().addMapLayers([selectedLayer2])
+                self.dlg.selectLayerGroupBox.setEnabled(False)
+                self.dlg.addFieldGroupBox.setEnabled(True)
+                self.dlg.myProgressBar.setEnabled(False)
+                fields =  selectedLayer2.fields()
+                fieldnames = [field.name() for field in fields]
+                self.dlg.fieldComboBox.addItems(fieldnames)
+                self.dlg.fieldComboBox.setCurrentIndex(-1)
+               
+
+        def allocate(layer1,layer2,nameField1,nameField2, start, step, stop):
+            self.dlg.myProgressBar.setValue(start)
+            layer1.isValid()
+            vpr = layer1.dataProvider()
+            vpr.addAttributes([QgsField(nameField1, QVariant.String)])
+            layer1.updateFields()
+            feats_L = [ feat for feat in layer2.getFeatures() ]
+            feats_SL = [ feat for feat in layer1.getFeatures() ]
+            layer1.startEditing()
+            
+            for i, feat in enumerate(feats_L):
+                for j, feat2 in enumerate(feats_SL):
+                    if feat.geometry().intersects(feat2.geometry()):
+                        if feat.geometry().contains(feat2.geometry()):
+                            feat2[nameField1]=feat[nameField2]
+                        elif feat2[nameField1]==NULL:
+                            feat2[nameField1]=feat[nameField2]
+                        else:
+                            feat2[nameField1]= str(feat2[nameField1])+" / "+ str(feat[nameField2])    
+                    
+                        layer1.updateFeature(feat2)
+                
+                self.dlg.myProgressBar.setValue(start+(i+1)*(100/step))
+            
+            self.dlg.myProgressBar.setValue(stop)
+            clearForm()
+               
+        def deleteField():
+            global selectedLayer1
+            fields = selectedLayer1.fields()
+            fieldnames = [field.name() for field in fields]
+            selectedLayer1.deleteAttribute((len(fieldnames)-1))
+
+        def allocate_field():
+            if self.dlg.nameNewField.text()!="" and self.dlg.fieldComboBox.currentIndex()!=-1:
+                self.dlg.myProgressBar.setEnabled(True)
+                global selectedLayer1
+                global selectedLayer2
+                feats_count = selectedLayer2.featureCount()
+            
+                allocate(selectedLayer1,selectedLayer2,self.dlg.nameNewField.text(),self.dlg.fieldComboBox.currentText(), 0, feats_count,100)
+    
+                msg = QMessageBox.question(None, 'Zakończ edycję', 'Czy zapisać zmiany w warstwie?', QMessageBox.Yes | QMessageBox.No| QMessageBox.Cancel)
+                    
+                if msg == QMessageBox.Yes:
+                    selectedLayer1.commitChanges()
+                    
+                if msg == QMessageBox.No:
+                    deleteField()                    
+                    selectedLayer1.commitChanges() 
+                    selectedLayer1.rollBack()  
+                    
+                self.dlg.myProgressBar.setValue(0)
+                self.dlg.myProgressBar.setEnabled(False)
+                self.dlg.addFieldGroupBox.setEnabled(False)
+
+           
+            elif self.dlg.nameNewField.text()=="":
+                msg=QMessageBox.critical(None,"Nadaj nazwę pola",'Nie nadano nazwy nowemu polu!') 
+            elif self.dlg.fieldComboBox.currentIndex()==-1:
+                msg=QMessageBox.critical(None,"Wybierz pole z listy",'Nie wybrano pola z listy!')
+            
+             
+        
+
+        def close():
+            #clearForm()
+            self.dlg.close()
+          
+        self.dlg.allocateObjectsBtn.clicked.connect(allocate_field)
+        self.dlg.inputBtn1.clicked.connect(selectLayer1)
+        self.dlg.inputBtn2.clicked.connect(selectLayer2)
+        self.dlg.closeBtn.clicked.connect(close)
+        self.dlg.clearBtn.clicked.connect(clearForm)
+
+        # show the dialog 
         self.dlg.show()
         # Run the dialog event loop
         result = self.dlg.exec_()
