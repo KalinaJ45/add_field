@@ -5,12 +5,14 @@
 [general]
 name=Add_Field
 qgisMinimumVersion=3.0
-description=ffff
+description=Wtyczka pozwala na przydzielenie obiektów wybranej warstwy shapefile do poszczególnych obiektów drugiej warstwy.
+ Do użytku pracowników LP.
 version=0.1
 author=Kalina Juszczyk
-email=kalina.juszczyk@wp.pl
+email=kalina.juszczyk@lasy.gov.pl
 
-about=rqwerqwer
+about=Wtyczka pozwala na przydzielenie obiektów wybranej warstwy shapefile do poszczególnych obiektów drugiej warstwy,
+ w obrębie  których te obiekty się znajdują, poprzez dodanie pól z nazwami obiektów zawierających do tabeli atrybutów wybranej warstwy.
 
 tracker=http://bugs
 repository=http://repo
